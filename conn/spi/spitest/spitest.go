@@ -34,14 +34,45 @@ func (r *RecordRaw) Close() error {
 	return nil
 }
 
-// Speed is a no-op.
-func (r *RecordRaw) Speed(hz int64) error {
+// BusParams is a no-op.
+func (r *RecordRaw) BusParams(highHz int64) error {
 	return nil
 }
 
-// Configure is a no-op.
-func (r *RecordRaw) Configure(mode spi.Mode, bits int) error {
+// CS implements spi.Bus.
+//
+// The cs line is ignored.
+func (r *RecordRaw) CS(cs int) (spi.ConnCloser, error) {
+	return &recordRawCS{r}, nil
+}
+
+type recordRawCS struct {
+	r *RecordRaw
+}
+
+func (r *recordRawCS) Lock() {
+	r.r.Lock()
+}
+
+func (r *recordRawCS) Unlock() {
+	r.r.Unlock()
+}
+
+func (r *recordRawCS) Close() error {
 	return nil
+}
+
+// DevParams is a no-op.
+func (r *recordRawCS) DevParams(highHz int64, mode spi.Mode, bits int) error {
+	return nil
+}
+
+func (rr *recordRawCS) Tx(w, r []byte) error {
+	return rr.r.Tx(w, r)
+}
+
+func (r *recordRawCS) Duplex() conn.Duplex {
+	return r.r.Duplex()
 }
 
 // Record implements spi.Conn that records everything written to it.
@@ -88,18 +119,10 @@ func (r *Record) Duplex() conn.Duplex {
 	return conn.DuplexUnknown
 }
 
-// Speed implements spi.Conn.
-func (r *Record) Speed(hz int64) error {
+// DevParams implements spi.Conn.
+func (r *Record) DevParams(highHz int64, mode spi.Mode, bits int) error {
 	if r.Conn != nil {
-		return r.Conn.Speed(hz)
-	}
-	return nil
-}
-
-// Configure implements spi.Conn.
-func (r *Record) Configure(mode spi.Mode, bits int) error {
-	if r.Conn != nil {
-		return r.Conn.Configure(mode, bits)
+		return r.Conn.DevParams(highHz, mode, bits)
 	}
 	return nil
 }
@@ -190,7 +213,7 @@ func (p *Playback) CS() gpio.PinOut {
 	return p.CSPin
 }
 
-var _ spi.Conn = &RecordRaw{}
-var _ spi.Conn = &Record{}
+var _ spi.Bus = &RecordRaw{}
+var _ spi.Bus = &Record{}
 var _ spi.Pins = &Record{}
-var _ spi.Conn = &Playback{}
+var _ spi.Bus = &Playback{}

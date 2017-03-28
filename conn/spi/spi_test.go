@@ -53,14 +53,34 @@ func ExampleOpenByName() {
 	// How a command line tool may let the user choose an I²C, yet default to the
 	// first bus known.
 	name := flag.String("spi", "", "SPI bus to use")
+	cs := flag.Int("cs", -1, "SPI CS line to use")
 	flag.Parse()
 	b, err := OpenByName(*name)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer b.Close()
-	// Use b...
-	b.Tx([]byte("cmd"), nil)
+	if err := b.BusParams(20000000); err != nil {
+		log.Fatal(err)
+	}
+
+	d, err := b.CS(*cs)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer d.Close()
+
+	// Pass 'd' to a device driver, which would do:
+	DeviceDriver := func(d Conn) error {
+		if err := d.DevParams(1000000, Mode3, 8); err != nil {
+			return err
+		}
+		return d.Tx([]byte("cmd"), nil)
+	}
+
+	if err := DeviceDriver(d); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func ExampleOpenByNumber() {
@@ -232,7 +252,7 @@ func TestUnregister(t *testing.T) {
 
 //
 
-func fakeBuser() (ConnCloser, error) {
+func fakeBuser() (BusCloser, error) {
 	return &fakeBus{}, nil
 }
 
@@ -255,12 +275,16 @@ func (f *fakeBus) Duplex() conn.Duplex {
 	return conn.DuplexUnknown
 }
 
-func (f *fakeBus) Speed(hz int64) error {
+func (f *fakeBus) BusParams(highHz int64) error {
 	return errors.New("not implemented")
 }
 
-func (f *fakeBus) Configure(mode Mode, bits int) error {
+func (f *fakeBus) DevParams(highHz int64, mode Mode, bits int) error {
 	return errors.New("not implemented")
+}
+
+func (f *fakeBus) CS(cs int) (ConnCloser, error) {
+	return nil, errors.New("not implemented")
 }
 
 func reset() {

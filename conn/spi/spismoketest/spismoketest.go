@@ -38,24 +38,27 @@ func (s *SmokeTest) Description() string {
 // Run implements the SmokeTest interface.
 func (s *SmokeTest) Run(args []string) error {
 	f := flag.NewFlagSet("spi", flag.ExitOnError)
-	bus := f.String("spi", "", "SPI bus to use")
+	spiName := f.String("spi", "", "SPI bus to use")
 	wp := f.String("wp", "", "gpio pin for EEPROM write-protect")
 	seed := f.Int64("seed", 0, "random number seed, default is to use the time")
 	f.Parse(args)
 
 	// Open the bus.
-	spiDev, err := spi.OpenByName(*bus)
+	spiBus, err := spi.OpenByName(*spiName)
 	if err != nil {
-		return fmt.Errorf("spi-smoke: opening SPI: %v", err)
+		return err
+	}
+	defer spiBus.Close()
+
+	spiDev, err := spiBus.CS(-1)
+	if err != nil {
+		return err
 	}
 	defer spiDev.Close()
 
 	// Set SPI parameters.
-	if err := spiDev.Configure(spi.Mode0, 8); err != nil {
-		return fmt.Errorf("spi-smoke: cannot set mode, %v", err)
-	}
-	if err := spiDev.Speed(4 * 1000 * 1000); err != nil {
-		return fmt.Errorf("spi-smoke: cannot set speed, %v", err)
+	if err := spiDev.DevParams(4*1000*1000, spi.Mode0, 8); err != nil {
+		return err
 	}
 
 	// Open the WC pin.

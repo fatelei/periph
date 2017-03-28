@@ -35,30 +35,55 @@ const (
 	Mode3 Mode = 0x3 // CPOL=1, CPHA=1
 )
 
-// Conn defines the interface a concrete SPI driver must implement.
+// Conn defines the interface a concrete SPI bus driver must implement to
+// communicate to a device over an SPI link with a CS line.
 //
 // It is expected to implement fmt.Stringer and optionally io.Writer and
 // io.Reader.
 type Conn interface {
 	conn.Conn
-	// Speed changes the bus speed.
-	Speed(hz int64) error
-	// Configure changes the communication parameters of the bus.
-	Configure(mode Mode, bits int) error
+	// DevParams changes the communication parameters of the bus to match what is
+	// needed by the device.
+	//
+	// It must be called by a device driver.
+	DevParams(highHz int64, mode Mode, bits int) error
 }
 
-// ConnCloser is a SPI bus that can be closed.
+// ConnCloser is a SPI connection that can be closed.
 //
-// This interface is meant to be handled by the application.
+// This interface is meant to be handled by the application when it stops using
+// the device connected over this link.
 type ConnCloser interface {
 	io.Closer
 	Conn
 }
 
+// Bus defines the interface a concrete SPI bus driver must implement.
+//
+// It is expected to implement fmt.Stringer.
+type Bus interface {
+	// BusParams specifies the overal communication parameters of the bus.
+	BusParams(highHz int64) error
+	// CS request the use of one of the chip select lines for use for the
+	// device.
+	//
+	// Use -1 if no CS line is needed. In this case, no other device can be
+	// connected to the SPI bus.
+	CS(i int) (ConnCloser, error)
+}
+
+// BusCloser is a SPI bus that can be closed.
+//
+// This interface is meant to be handled by the application.
+type BusCloser interface {
+	io.Closer
+	Bus
+}
+
 // Pins defines the pins that a SPI bus interconnect is using on the host.
 //
-// It is expected that a implementer of Conn also implement Pins but this is
-// not a requirement.
+// It is expected that a implementer of Bus and Conn also implement Pins but
+// this is not a requirement.
 type Pins interface {
 	// CLK returns the SCK (clock) pin.
 	CLK() gpio.PinOut
@@ -75,7 +100,7 @@ type Pins interface {
 // Opener opens an handle to a bus.
 //
 // It is provided by the actual bus driver.
-type Opener func() (ConnCloser, error)
+type Opener func() (BusCloser, error)
 
 // Ref references an SPI bus.
 //
@@ -110,7 +135,7 @@ type Ref struct {
 //
 // When the SPI bus is provided by an off board plug and play bus like USB via
 // an FT232H USB device, there can be no associated number.
-func OpenByNumber(busNumber int) (ConnCloser, error) {
+func OpenByNumber(busNumber int) (BusCloser, error) {
 	var r *Ref
 	var err error
 	func() {
@@ -143,7 +168,7 @@ func OpenByNumber(busNumber int) (ConnCloser, error) {
 // recommended default value unless an application knows the exact bus to use.
 //
 // Each bus can register multiple aliases, each leading to the same bus handle.
-func OpenByName(name string) (ConnCloser, error) {
+func OpenByName(name string) (BusCloser, error) {
 	var r *Ref
 	var err error
 	func() {
